@@ -14,7 +14,7 @@ Check out your distro's package repositories or get it at [FFmpeg](https://www.f
         Available options:
                 -256        using 256(8bits) colors display (normal terminal emulators under X usually support this)
                 -8          using 8 colors(or 16 colors if supported) display(use for Linux tty console, or some ssh software that doesn't have 256 colors)
-		-gray		using 4 gray scale colors to display(for tty console)
+		-gray	    using 4 gray scale colors to display(for tty console)
 ~**If you close the program or terminate it in weired way(like Ctrl-C), please clear the data manually by:**~
 
 	$ make clean
