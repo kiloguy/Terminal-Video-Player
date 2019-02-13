@@ -23,22 +23,23 @@ enum COLOR_MODE{
 COLOR_MODE mode = COLOR256;
 char inputFile[1024];
 
+void play_music(){
+	char line[1024];
+	sprintf(line, "ffplay -autoexit -nodisp %s 2>/dev/null", inputFile);
+	FILE* play = popen(line, "r");
+	pclose(play);
+}
+
 void counting(){
 	std::this_thread::sleep_for(std::chrono::seconds(3));
+	std::thread music(play_music);
 	while(true){
 		std::this_thread::sleep_for(std::chrono::milliseconds(125));
 		flag++;
 		if(stopTimer)
 			break;
 	}
-}
-
-int count(){
-	FILE* ls = popen("ls -al | grep \"record.*.jpeg\" | wc", "r");
-	char line[1024];
-	fgets(line, 1024, ls);
-	pclose(ls);
-	return atoi(line);
+	music.join();
 }
 
 void init_video(){
@@ -95,7 +96,7 @@ bool parse(char** v, int c){
 
 void user_signal(int signum){
 	printf("\nInterrupt signal received. Clearing data...\n");
-	FILE* rm = popen("rm record*.jpeg", "r");
+	FILE* rm = popen("rm record*.jpeg 2>/dev/null", "r");
 	pclose(rm);
 	exit(signum);
 }
@@ -129,7 +130,8 @@ int main(int argc, char** argv){
 	std::this_thread::sleep_for(std::chrono::seconds(3));
 	
 	while(true){
-		sprintf(filename, "record%d.jpeg", flag);
+		int index = flag;
+		sprintf(filename, "record%d.jpeg", index);
 		while(true){
 			if((pixel = stbi_load(filename, &w, &h, &n, 0)) == NULL){
 				std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -201,12 +203,30 @@ int main(int argc, char** argv){
 						if(fr + fg + fb > 384)
 							foreid += 8;
 						break;
+					case COLORgray:
+						if(br + bg + bb > 384)
+							backid = 7;
+						else
+							backid = 0;
+						if(fr + fg + fb > 576)
+							foreid = 15;
+						else if(fr + fg + fb > 384)
+							foreid = 7;
+						else if(fr + fg + fb > 192)
+							foreid = 8;
+						else
+							foreid = 0;
 				}
 				printf("\033[48;5;%dm\033[38;5;%dm*\033[0m", backid, foreid);
 			}
 		}
 		stbi_image_free(pixel);
-		printf("flag %d %s", flag ,filename);
+		printf("[");
+		int times = (t.ws_col - 2) * index / frame;
+		for(int i = 0; i < times; i++)
+			printf("=");
+		printf("\033[%dC", t.ws_col - 2 - times);
+		printf("]");
 
 		if(flag > frame)
 			break;
