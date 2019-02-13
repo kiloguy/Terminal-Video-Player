@@ -11,7 +11,7 @@ A video player that can play video file under a terminal(urxvt, xterm...) or a c
 	$ term-player <option> [FileName]
         Available options:
                 -256        using 256(8bits) colors display (normal terminal emulators under X usually support this)
-                -8          using 8 colors(or 16 colors if supported) display(use forLinxu tty console, or some ssh software that doesn't have 256 colors)
+                -8          using 8 colors(or 16 colors if supported) display(use for Linux tty console, or some ssh software that doesn't have 256 colors)
 **If you close the program or terminate it in weired way(like Ctrl-C), please clear the data manually by:**
 
 	$ make clean
