@@ -1,4 +1,5 @@
 #include	<stdio.h>
+#include	<signal.h>
 #include	<string.h>
 #include	<thread>
 #include	<chrono>
@@ -11,6 +12,16 @@ int flag = 1;
 bool stopTimer = false;
 bool couldplay = false;
 int frame = 0;
+
+enum COLOR_MODE{
+	COLOR256,
+	COLOR8,
+	COLORgray,
+};
+
+/* Global options */
+COLOR_MODE mode = COLOR256;
+char inputFile[1024];
 
 void counting(){
 	std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -30,12 +41,12 @@ int count(){
 	return atoi(line);
 }
 
-void init_video(const char* filename){
+void init_video(){
 	int second = 0;
 	FILE* bin = NULL;
 	char line[1024];
 	char* temp = NULL;
-	sprintf(line, "ffmpeg -i %s -hide_banner 2>info", filename);
+	sprintf(line, "ffmpeg -i %s -hide_banner 2>info", inputFile);
 	bin = popen(line, "r");
 	pclose(bin);
 	bin = popen("cat info | grep Duration | cut -d \' \' -f 4", "r");
@@ -47,7 +58,7 @@ void init_video(const char* filename){
 	temp = strstr(temp, ":") + 1;
 	frame += atoi(temp) * 8;
 	pclose(bin);
-	sprintf(line, "ffmpeg -i %s -y -vf fps=8 -vframes %d record%%d.jpeg 2>ffmpeg_info", filename, frame);
+	sprintf(line, "ffmpeg -i %s -y -vf fps=8 -vframes %d record%%d.jpeg 2>ffmpeg_info", inputFile, frame);
 	bin = popen(line, "r");
 	pclose(bin);
 }
@@ -65,20 +76,58 @@ void remove_file(){
 	}
 }
 
+bool parse(char** v, int c){
+	for(int i = 1; i < c - 1; i++){
+		if(strcmp(v[i], "-256") == 0)
+			mode = COLOR256;
+		else if(strcmp(v[i], "-8") == 0)
+			mode = COLOR8;
+		else if(strcmp(v[i], "-gray") == 0)
+			mode = COLORgray;
+		else{
+			printf("Unknown option \"%s\".\n", v[i]);
+			return false;
+		}
+	}
+	strcpy(inputFile, v[c - 1]);
+	return true;
+}
+
+void user_signal(int signum){
+	printf("\nInterrupt signal received. Clearing data...\n");
+	FILE* rm = popen("rm record*.jpeg", "r");
+	pclose(rm);
+	exit(signum);
+}
+
 int main(int argc, char** argv){
+	if(!parse(argv, argc))
+		return -1;
+	FILE* test = fopen(inputFile, "r");
+	if(!test){
+		printf("File \"%s\" not found.\n", inputFile);
+		return -1;
+	}
+	fclose(test);
+
+	signal(SIGINT, user_signal);
+
 	struct winsize t;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &t);
 
 	unsigned char* pixel = NULL;
 	int w, h, n;
 	char filename[1024];
+	
+	int offsetRow = h / (t.ws_row - 1);
+	int offsetCol = w / t.ws_col;
 
 	std::thread timerThread(counting);
-	std::thread loadThread(init_video, argv[1]);
+	std::thread loadThread(init_video);
 	std::thread clearThread(remove_file);
 	printf("loading...\n");
 	std::this_thread::sleep_for(std::chrono::seconds(3));
-
+	
 	while(true){
 		sprintf(filename, "record%d.jpeg", flag);
 		while(true){
@@ -90,12 +139,70 @@ int main(int argc, char** argv){
 				break;
 		}
 		printf("\033[1;1H");
+
 		int offsetRow = h / (t.ws_row - 1);
 		int offsetCol = w / t.ws_col;
-		int startCol;
+		
 		for(int i = 0; i < t.ws_row - 1; i++){
 			for(int j = 0; j < t.ws_col; j++){
-				printf("\033[48;5;%dm\033[38;5;%dm*\033[0m", 16 + 36 * (pixel[i * offsetRow * w * 3 + j * offsetCol * 3] / 43) + 6 * (pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 1] / 43) + (pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 2] / 43), 16 + 36 * (pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + offsetCol / 2 * 3] / 43) + 6 * (pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 1 + offsetCol / 2 * 3] / 43) + (pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 2 + offsetCol / 2 * 3] / 43));
+				int backid, foreid;
+				unsigned char br = pixel[i * offsetRow * w * 3 + j * offsetCol * 3];
+				unsigned char bg = pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 1];
+				unsigned char bb = pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 2];
+				unsigned char fr = pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + offsetCol / 2 * 3];
+				unsigned char fg = pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 1 + offsetCol / 2 * 3];
+				unsigned char fb = pixel[i * offsetRow * w * 3 + j * offsetCol * 3 + 2 + offsetCol / 2 * 3];
+				switch(mode){
+					case COLOR256:
+						backid = 16 + 36 * (br / 43) + 6 * (bg / 43) + (bb / 43);
+						foreid = 16 + 36 * (fr / 43) + 6 * (fg / 43) + (fb / 43);
+						break;
+					case COLOR8:
+						if(br > 128){
+							if(bg > 128 && bb > 128)
+								backid = 7;
+							else if(bg > 128 && bb < 128)
+								backid = 3;
+							else if(bg < 128 && bb > 128)
+								backid = 5;
+							else
+								backid = 1;
+						}
+						else{
+							if(bg > 128 && bb > 128)
+								backid = 6;
+							else if(bg > 128 && bb < 128)
+								backid = 2;
+							else if(bg < 128 && bb > 128)
+								backid = 4;
+							else
+								backid = 0;
+						}
+						if(fr > 128){
+							if(fg > 128 && fb > 128)
+								foreid = 7;
+							else if(fg > 128 && fb < 128)
+								foreid = 3;
+							else if(fg < 128 && fb > 128)
+								foreid = 5;
+							else
+								foreid = 1;
+						}
+						else{
+							if(fg > 128 && fb > 128)
+								foreid = 6;
+							else if(fg > 128 && fb < 128)
+								foreid = 2;
+							else if(fg < 128 && fb > 128)
+								foreid = 4;
+							else
+								foreid = 0;
+						}
+						if(fr + fg + fb > 384)
+							foreid += 8;
+						break;
+				}
+				printf("\033[48;5;%dm\033[38;5;%dm*\033[0m", backid, foreid);
 			}
 		}
 		stbi_image_free(pixel);
