@@ -2,8 +2,9 @@
 A video player that can play video file under a terminal(urxvt, xterm...) or a console(linux tty) using ANSI escape code.
 
 ## Requirements
-* FFmepg(with ffplay)    Check out your distro's package repositories or get it at [FFmpeg](https://www.ffmpeg.org).
-It will run ffmpeg and ffplay(for the sound) in background.
+* FFmepg(with ffplay)
+
+Check out your distro's package repositories or get it at [FFmpeg](https://www.ffmpeg.org). It will run ffmpeg and ffplay(for the sound) in background.
 
 ## Build
 	$ make
